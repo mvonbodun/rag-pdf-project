@@ -1,0 +1,52 @@
+dataset:
+  # Use one or more docs. For Kaggle any.pdf → place in data/raw/
+  docs:
+    - data/raw/fy10syb.pdf
+
+chunking:
+  parsers: [pymupdf, pdfplumber]  # 2 parsers for now (unstructured requires additional setup)
+  # Paired chunk_size and overlap (each chunk_size has proportional overlap ~25%)
+  # This creates a column-wise grid: 3 configs × 2 parsers = 6 total combinations
+  chunk_overlap_pairs:
+    - chunk_size: 128
+      overlap: 32      # 25% overlap
+    - chunk_size: 256
+      overlap: 64      # 25% overlap
+    - chunk_size: 512
+      overlap: 128     # 25% overlap
+  layout_aware: true          # use headings/paragraphs/tables first
+  tokenizer: cl100k_base      # for token-budgeting
+  max_context_rule:
+    k_values: [3, 5]          # validate k*chunk_size <= 4k-8k tokens
+
+retrievers:
+  - kind: faiss
+    distance: cosine
+    ef_search: 64    # ignored for flat; keep for IVF/HNSW variants
+  # optional:
+  # - kind: lancedb
+  #   index: hnsw
+  #   m: 16
+  #   ef_construction: 200
+
+embeddings_ref: embeddings     # from providers.yaml
+
+bm25:
+  enabled: true
+
+rerank:
+  candidates: 20
+  use: [none, cohere]
+
+generation:
+  k: 5
+  model_ref: llms.cost         # start with cost model
+  max_tokens: 500
+  style: "concise_with_citations"
+
+judging:
+  model_ref: llms.cost         # judge with cost model; spot-check with quality
+  schema:
+    faithfulness: bool
+    relevance: bool
+    explanation: str

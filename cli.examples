@@ -1,0 +1,18 @@
+# 1) Parse+chunk all
+python -m src.cli chunk --config configs/grid.default.yaml
+
+# 2) Build indexes
+python -m src.cli index --config configs/grid.default.yaml
+
+# 3) Generate synthetic QA (LLM or rule-based)
+python -m src.cli synth --config configs/grid.default.yaml
+
+# 4) Evaluate retrieval (no rerank + rerank)
+python -m src.cli eval-retrieval --config configs/grid.default.yaml --rerank none
+python -m src.cli eval-retrieval --config configs/grid.default.yaml --rerank cohere
+
+# 5) Select best & attach generator
+python -m src.cli gen --best --k 5 --provider openai --model gpt-4o-mini
+
+# 6) Judge answers
+python -m src.cli eval-gen --judge openai:gpt-4o-mini

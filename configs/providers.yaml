@@ -1,0 +1,32 @@
+llms:
+  cost:
+    provider: openai
+    model: gpt-4o-mini
+  quality:
+    provider: openai
+    model: gpt-4o
+  # optional alt:
+  # quality_alt:
+  #   provider: openrouter
+  #   model: meta-llama/llama-3.1-70b-instruct
+
+embeddings:
+  - id: openai-small
+    provider: openai
+    model: text-embedding-3-small
+  - id: openai-large
+    provider: openai
+    model: text-embedding-3-large
+  - id: ada-002
+    provider: openai
+    model: text-embedding-ada-002
+  # SentenceTransformers (commented out due to macOS segfault issues)
+  # - id: minilm
+  #   provider: sentence-transformers
+  #   model: sentence-transformers/all-MiniLM-L6-v2
+  # - id: instructor
+  #   provider: sentence-transformers
+  #   model: hkunlp/instructor-large
+
+cohere:
+  api_key_env: COHERE_API_KEY

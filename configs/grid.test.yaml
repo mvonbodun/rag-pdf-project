@@ -1,0 +1,40 @@
+dataset:
+  # Test with single file
+  docs:
+    - data/raw/fy10syb.pdf
+
+chunking:
+  parsers: [pymupdf]  # Test with just one parser first
+  chunk_sizes: [256]  # Just one size
+  overlaps: [64]      # Just one overlap
+  layout_aware: true
+  tokenizer: cl100k_base
+  max_context_rule:
+    k_values: [3, 5]
+
+retrievers:
+  - kind: faiss
+    distance: cosine
+    ef_search: 64
+
+embeddings_ref: embeddings
+
+bm25:
+  enabled: true
+
+rerank:
+  candidates: 20
+  use: [none, cohere]
+
+generation:
+  k: 5
+  model_ref: llms.cost
+  max_tokens: 500
+  style: "concise_with_citations"
+
+judging:
+  model_ref: llms.cost
+  schema:
+    faithfulness: bool
+    relevance: bool
+    explanation: str

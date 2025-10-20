@@ -1,0 +1,23 @@
+llms:
+  cost:
+    provider: openai
+    model: gpt-4o-mini
+  quality:
+    provider: openai
+    model: gpt-4o
+
+embeddings:
+  # Start with just sentence-transformers (no API keys needed)
+  - id: minilm
+    provider: sentence-transformers
+    model: sentence-transformers/all-MiniLM-L6-v2
+  - id: instructor
+    provider: sentence-transformers
+    model: hkunlp/instructor-large
+  # OpenAI (requires API key - comment out for now)
+  # - id: openai-small
+  #   provider: openai
+  #   model: text-embedding-3-small
+
+cohere:
+  api_key_env: COHERE_API_KEY

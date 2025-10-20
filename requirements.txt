@@ -1,0 +1,79 @@
+# ============================================================================
+# RAG PDF Evaluation Pipeline - Requirements
+# ============================================================================
+# This file contains all dependencies used in the systematic RAG evaluation
+# project for PDF ingestion, chunking, embedding, retrieval, and generation.
+#
+# Installation: pip install -r requirements.txt
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Core Dependencies
+# ----------------------------------------------------------------------------
+python-dotenv>=1.0.0          # Load environment variables from .env file
+pyyaml>=6.0.0                 # Parse YAML configuration files
+
+# ----------------------------------------------------------------------------
+# CLI & Terminal Display
+# ----------------------------------------------------------------------------
+rich>=13.7.0                  # Beautiful terminal formatting and progress bars
+
+# ----------------------------------------------------------------------------
+# PDF Parsing
+# ----------------------------------------------------------------------------
+pymupdf>=1.24.0               # PyMuPDF (fitz) - fast PDF parsing
+pdfplumber>=0.11.0            # PDF parsing with better table/layout support
+                              # Winner: pdfplumber extracted 85% more blocks
+
+# ----------------------------------------------------------------------------
+# Text Processing & Tokenization
+# ----------------------------------------------------------------------------
+tiktoken>=0.7.0               # OpenAI's tokenizer for accurate chunk sizing
+
+# ----------------------------------------------------------------------------
+# Vector Database & Embeddings
+# ----------------------------------------------------------------------------
+faiss-cpu>=1.8.0              # Facebook AI Similarity Search for vector indexing
+numpy>=1.24.0                 # Array operations for embeddings and vectors
+
+# ----------------------------------------------------------------------------
+# OpenAI API
+# ----------------------------------------------------------------------------
+openai>=1.0.0                 # OpenAI API client for:
+                              # - Embeddings (text-embedding-ada-002, etc.)
+                              # - LLM generation (gpt-4o-mini)
+                              # - LLM-as-Judge evaluation
+
+# ----------------------------------------------------------------------------
+# Data Analysis & Export
+# ----------------------------------------------------------------------------
+pandas>=2.0.0                 # DataFrame operations for evaluation results
+
+# ----------------------------------------------------------------------------
+# Optional Dependencies (included in original requirements but not used)
+# ----------------------------------------------------------------------------
+# rank-bm25>=0.2              # BM25 baseline (we have custom implementation in ir_bm25.py)
+# cohere>=5.5                 # Cohere API for reranking (we skipped Step 6)
+# sentence-transformers>=3.0  # Local embedding models (we used OpenAI API)
+# lancedb>=0.7                # Alternative vector store (we used FAISS)
+# litellm>=1.40               # Multi-provider LLM client (we used OpenAI directly)
+# pydantic>=2.7               # Data validation (not needed in current impl)
+# unstructured>=0.14          # Layout-aware parsing (pdfplumber sufficient)
+# logfire>=0.49               # Logging/tracing (not implemented)
+# braintrust>=0.0.55          # Experiment tracking (not implemented)
+
+# ============================================================================
+# Verified Working Versions (as of October 2025)
+# ============================================================================
+# python==3.13.5
+# python-dotenv==1.0.1
+# pyyaml==6.0.2
+# rich==13.9.2
+# pymupdf==1.24.10
+# pdfplumber==0.11.4
+# tiktoken==0.7.0
+# faiss-cpu==1.8.0.post1
+# numpy==2.1.2
+# openai==1.51.2
+# pandas==2.2.3
+# ============================================================================
