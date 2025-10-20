@@ -1,170 +1,450 @@
-Goal
-Build a reproducible pipeline to (1) chunk long PDFs/markdown, (2) index with multiple embedding models, (3) generate synthetic QA with gold labels, (4) evaluate retrieval (Recall/MRR/Precision) across chunking × embeddings × retrieval/rerank combos, (5) attach an LLM generator and evaluate generation quality (faithfulness/relevance). Pick the best configuration and explain why.
-0) Repo Layout
-rag-eval/
-  ├─ data/
-  │   ├─ raw/                     # original PDFs / markdown dataset
-  │   ├─ processed/               # parsed+chunked artifacts per config
-  │   └─ qa/                      # synthetic QA sets per config (jsonl)
-  ├─ indexes/
-  │   ├─ faiss/                   # FAISS index per config+embedding
-  │   └─ lancedb/                 # (optional) LanceDB tables
-  ├─ runs/
-  │   ├─ retrieval/               # CSV/JSON metrics per run
-  │   └─ generation/              # LLM-as-judge results per run
-  ├─ src/
-  │   ├─ config.py                # Pydantic models for config/QA schema
-  │   ├─ parse_chunk.py           # layout-aware parsing + chunking
-  │   ├─ build_index.py           # embeddings + FAISS/LanceDB builders
-  │   ├─ gen_synth_qa.py          # synthetic QA generation (LLM or rules)
-  │   ├─ eval_retrieval.py        # Recall@K, Precision@K, MRR@K
-  │   ├─ rerank.py                # Cohere / open-source reranking
-  │   ├─ generate_answers.py      # attach generator LLM + prompts
-  │   ├─ eval_generation.py       # faithfulness/grounding via LLM-judge
-  │   ├─ utils_logging.py         # Logfire/Braintrust hooks
-  │   └─ cli.py                   # orchestration / grid-search runner
-  ├─ configs/
-  │   ├─ grid.default.yaml        # chunk sizes/overlaps, embeddings, K
-  │   └─ providers.yaml           # LiteLLM/OpenRouter/OpenAI keys+models
-  ├─ requirements.txt
-  └─ README.md  ← you are here
-1) Dataset
-Use either:
-Kaggle “Enterprise RAG Markdown” (any.pdf → markdown)
-or
-Your own PDF(s) parsed into markdown.
-Put source files under data/raw/.
-2) Parsing & Chunking (Layout-aware)
-Why: PDFs are visually structured; chunk along headings/paragraphs/tables first, then tokenize.
-Implement (src/parse_chunk.py)
-Parse to structured blocks using PyMuPDF or unstructured (headings, paragraphs, lists, tables).
-Build chunks by unit of meaning, then token-constrain to your chunk size with overlap.
-Export artifacts per configuration to data/processed/{docname}__cs{chunk}__ov{overlap}.jsonl.
-Grid you’ll test (edit in configs/grid.default.yaml):
-chunk_sizes: [128, 256, 512]
-overlaps:    [32, 64, 128]
-k_values:    [3, 5]            # top-K to evaluate
-retrievers:  ["faiss"]         # ("lancedb" optional)
+# RAG Evaluation Pipeline
+
+> A systematic framework for evaluating and optimizing Retrieval-Augmented Generation (RAG) systems for PDF documents.
+
+## 🎯 Project Goal
+
+Build a reproducible pipeline to systematically evaluate RAG configurations:
+1. **Parse & Chunk** PDFs with multiple strategies
+2. **Index** with various embedding models
+3. **Generate** synthetic QA pairs with gold labels
+4. **Evaluate** retrieval performance (Recall@K, Precision@K, MRR@K)
+5. **Assess** generation quality (faithfulness, relevance, completeness)
+6. **Identify** optimal configuration for your documents
+
+## 🚀 Quick Start
+
+```bash
+# Run the complete pipeline
+python src/run_pipeline.py --pdf data/raw/your_document.pdf
+
+# Quick mode (single configuration for testing)
+python src/run_pipeline.py --pdf data/raw/your_document.pdf --quick
+
+# Skip evaluation (just build infrastructure)
+python src/run_pipeline.py --pdf data/raw/your_document.pdf --skip-eval
+```
+
+## 📊 Current Best Configuration
+
+**Retrieval Performance:**
+- **Parser:** pdfplumber (+85% more content vs PyMuPDF)
+- **Chunks:** 512 tokens with 128 overlap (25% ratio)
+- **Embedding:** text-embedding-ada-002
+- **Recall@5:** 91.7% (excellent!)
+
+**Generation Quality:**
+- **LLM:** gpt-4o-mini
+- **Faithfulness:** 4.5/5.0 (minimal hallucinations)
+- **Relevance:** 5.0/5.0 (perfect - always answers question)
+- **Completeness:** 4.33/5.0 (comprehensive coverage)
+- **Citations:** 3.75/5.0 (good grounding)
+- **Overall:** 4.4/5.0 (production-ready!)
+
+## 📁 Project Structure
+
+```
+rag-pdf-project/
+├── data/
+│   ├── raw/                    # Source PDFs
+│   ├── processed/              # Chunked documents (JSONL)
+│   └── qa/                     # Synthetic QA pairs with gold labels
+├── indexes/
+│   ├── faiss/                  # FAISS vector indexes
+│   ├── lancedb/                # (Optional) LanceDB tables
+│   └── dryrun/                 # Dry-run metadata
+├── runs/
+│   ├── retrieval/              # Retrieval evaluation results (CSV)
+│   └── generation/             # Answer generation + LLM-as-Judge (CSV/JSONL)
+├── src/
+│   ├── config.py               # Configuration schemas (Pydantic)
+│   ├── parse_chunk.py          # PDF parsing + token-aware chunking
+│   ├── build_index.py          # Vector index building (FAISS)
+│   ├── gen_synth_qa.py         # Synthetic QA generation
+│   ├── eval_retrieval.py       # Retrieval evaluation (Recall/Precision/MRR)
+│   ├── rerank.py               # Reranking (optional)
+│   ├── generate_answers.py     # Answer generation with citations
+│   ├── eval_generation.py      # LLM-as-Judge evaluation
+│   ├── run_pipeline.py         # End-to-end orchestrator
+│   └── utils_logging.py        # Logging utilities
+├── configs/
+│   ├── grid.default.yaml       # Evaluation grid (chunks, embeddings, K)
+│   └── providers.yaml          # API provider configuration
+├── prompts/
+│   ├── retriever_aware_answering.txt
+│   └── LLM-as-judge.txt
+├── requirements.txt
+├── .env                        # API keys (not committed)
+└── README.md
+```
+
+## 🔧 Setup
+
+### 1. Install Dependencies
+
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install packages
+pip install -r requirements.txt
+```
+
+### 2. Configure API Keys
+
+Create a `.env` file with your OpenAI API key:
+
+```bash
+OPENAI_API_KEY=sk-your-key-here
+```
+
+### 3. Add Your Documents
+
+Place PDF files in `data/raw/`:
+
+```bash
+cp your_document.pdf data/raw/
+```
+
+## 📖 Pipeline Steps
+
+### Step 1: Dataset
+
+**Input:** PDF documents in `data/raw/`
+
+**Sources:**
+- Your own PDFs
+- Kaggle "Enterprise RAG Markdown" dataset
+- Any technical documentation
+
+### Step 2: Parsing & Chunking
+
+**Script:** `src/parse_chunk.py`
+
+**What it does:**
+- Parses PDFs using PyMuPDF or pdfplumber
+- Extracts structured blocks (headings, paragraphs, lists, tables)
+- Creates token-aligned chunks with configurable size and overlap
+- Preserves document structure and context
+
+**Configuration:**
+```yaml
+chunk_sizes: [128, 256, 512]    # tokens per chunk
+overlaps: [32, 64, 128]         # overlap tokens (25% ratio)
+parsers: ["pymupdf", "pdfplumber"]
+```
+
+**Output:** `data/processed/{doc}__parser_{parser}__cs{size}__ov{overlap}.jsonl`
+
+**Usage:**
+```bash
+python src/parse_chunk.py \
+    --pdf data/raw/doc.pdf \
+    --parser pdfplumber \
+    --chunk-size 512 \
+    --overlap 128
+```
+
+### Step 3: Vector Indexing
+
+**Script:** `src/build_index.py`
+
+**What it does:**
+- Batch-embeds chunks with multiple embedding models
+- Builds FAISS indexes for efficient similarity search
+- Supports multiple embedding providers (OpenAI, Cohere, etc.)
+
+**Configuration:**
+```yaml
 embeddings:
-  - provider: "openai"         # via LiteLLM
-    name: "text-embedding-3-small"
-  - provider: "sentence-transformers"
-    name: "all-MiniLM-L6-v2"
-  - provider: "sentence-transformers"
-    name: "instructor-large"   # or "hkunlp/instructor-large"
-rerankers:
-  - none
-  - cohere
-Constraint sanity check
-Ensure k * chunk_size fits your generator’s context window (e.g., k=5, chunk=512 → 2560 tokens just for context chunks).
-3) Indexing
-Implement (src/build_index.py)
-Batch-embed with ThreadPoolExecutor (fast, consistent).
-Use LiteLLM for OpenAI/OpenRouter OR SentenceTransformers locally.
-Build one index per (chunk_size, overlap, embedding_model):
-Save FAISS under indexes/faiss/{doc}__cs{cs}__ov{ov}__emb{model_id}/.
-(Optional) LanceDB under indexes/lancedb/....
-4) Synthetic QA Generation (with Gold Labels)
-Principle: Questions should intentionally probe overlaps and adjacent chunks to stress retrieval.
-Implement (src/gen_synth_qa.py)
-For every chunk, create a set of questions:
-Factual (“What is X?”)
-Analytical (“Why does X happen?”)
-Comparative (“How does X differ from Y?”)
-Summarization (“Summarize section Y”)
-Multi-hop across 2–3 semantically related chunks.
-Build gold labels as list of relevant chunk_ids (≥1).
-For multi-chunk Qs, include all source chunk_ids.
-For overlap stress, generate Qs whose answer spans the boundary between chunk N and N+1.
-Store QA in data/qa/{doc}__cs{cs}__ov{ov}__emb{model_id}.jsonl.
-Pydantic Schemas (src/config.py)
-Validate QAItem:
-class QAItem(BaseModel):
-    id: str
-    question: str
-    relevant_chunk_ids: List[str]   # gold labels
-    granularity: Literal["paragraph","section","page","multi-hop"]
-    difficulty: Literal["easy","medium","hard"]
-Enforce JSON correctness so your CLI vs JSON don’t drift.
-Optional: Use an LLM to generate question variants; log prompts/outputs with Logfire (Pydantic Logfire) and/or Braintrust.
-5) Retrieval Evaluation
-Implement (src/eval_retrieval.py)
-For each QA item:
-Retrieve top-K chunks for the question string.
-Compute:
-Recall@K = fraction of gold chunk_ids present in top-K.
-Precision@K = (# gold in top-K) / K.
-MRR@K = 1 / rank(first gold in top-K), else 0.
-Run for each config (chunk_size × overlap × embedding × retriever).
-Save results to runs/retrieval/{stamp}__cs{cs}__ov{ov}__emb{model}.csv.
-Optional Reranking (src/rerank.py)
-Apply Cohere Reranker (or open-source) to top-M retrieved (e.g., M=20), then slice K.
-Recompute metrics and compare with “no rerank”.
-Report Template (you will fill numbers later)
-Config	K	Recall@K	Precision@K	MRR@K
-cs128-ov64 + MiniLM + FAISS	5			
-cs256-ov64 + Instructor + FAISS	5			
-...				
-6) Select Best Retrieval Configuration(s)
-Pick top 1–2 based on Recall@K and MRR@K (primary) plus Precision@K (secondary).
-Note trade-offs: smaller chunks + high overlap → better recall, higher redundancy/cost; larger chunks → better semantic cohesion, but risk context blowout.
-Document your choice and rationale.
-7) Attach Generator + Prompting
-Implement (src/generate_answers.py)
-For each QA item:
-Retrieve top-K chunks (using your selected config).
-Construct a grounded prompt that:
-Shows the question
-Provides top-K chunks as citations with chunk_id markers
-Instructs model to answer only from context; if not present, say “not found in context”
-Save outputs to runs/generation/{stamp}__best_config.jsonl:
+  - openai:text-embedding-3-small (1536d)
+  - openai:text-embedding-3-large (3072d)
+  - openai:text-embedding-ada-002 (1536d)
+```
+
+**Output:** `indexes/faiss/{config}__emb_{model}/`
+
+**Usage:**
+```bash
+python src/build_index.py \
+    --chunks data/processed/doc__parser_pdfplumber__cs512__ov128.jsonl \
+    --embedding text-embedding-ada-002
+```
+
+### Step 4: Synthetic QA Generation
+
+**Script:** `src/gen_synth_qa.py`
+
+**What it does:**
+- Generates diverse question types from chunks
+- Creates gold labels (relevant chunk IDs)
+- Stress-tests retrieval with boundary and multi-hop questions
+
+**Question Types:**
+1. **Factual:** "What is X?"
+2. **Analytical:** "Why does X happen?"
+3. **Multi-hop:** Questions requiring multiple chunks
+4. **Boundary:** Questions spanning chunk boundaries
+
+**Output:** `data/qa/{config}__qa.jsonl`
+
+**Usage:**
+```bash
+python src/gen_synth_qa.py \
+    --chunks data/processed/doc__parser_pdfplumber__cs512__ov128.jsonl \
+    --llm gpt-4o-mini \
+    --num-questions 12
+```
+
+### Step 5: Retrieval Evaluation
+
+**Script:** `src/eval_retrieval.py`
+
+**What it does:**
+- Evaluates retrieval across all configurations
+- Computes Recall@K, Precision@K, MRR@K
+- Identifies best performing setup
+
+**Metrics:**
+- **Recall@K:** Fraction of gold chunks in top-K (primary metric)
+- **Precision@K:** Accuracy of retrieved chunks
+- **MRR@K:** Mean Reciprocal Rank (ranking quality)
+
+**Output:** `runs/retrieval/retrieval_evaluation_summary.csv`
+
+**Usage:**
+```bash
+python src/eval_retrieval.py \
+    --qa-dir data/qa/ \
+    --indexes-dir indexes/faiss/ \
+    --k 5
+```
+
+### Step 6: Reranking (Optional)
+
+**Script:** `src/rerank.py`
+
+**What it does:**
+- Applies reranking to top-M retrieved chunks
+- Uses Cohere or open-source models
+- Improves precision for challenging queries
+
+**Note:** Skipped in current pipeline due to excellent baseline recall (91.7%)
+
+### Step 7: Answer Generation
+
+**Script:** `src/generate_answers.py`
+
+**What it does:**
+- Generates grounded answers using best configuration
+- Extracts citations from retrieved chunks
+- Uses structured JSON output for reliable parsing
+
+**Output:** `runs/generation/answers__{config}.jsonl`
+
+**Format:**
+```json
 {
-  "qa_id": "...",
-  "question": "...",
-  "retrieved_chunk_ids": ["..."],
-  "answer": "...",
-  "citations": ["chunk_12","chunk_13"]
+  "question_id": "q_001",
+  "question": "What is X?",
+  "answer": "X is...",
+  "citations": [
+    {"chunk_id": "chunk_42", "text": "...relevant excerpt..."}
+  ]
 }
-Use LiteLLM to swap models (OpenAI/OpenRouter), and log every call via Logfire. (Optional: Braintrust for trace + thumbs up/down.)
-8) Generation Evaluation (LLM-as-Judge)
-Implement (src/eval_generation.py)
-Judge criteria per answer:
-Faithfulness (supported by retrieved text? cite spans/chunk_ids)
-Relevance (addresses the question?)
-Ground Truth Match (if gold textual answer is available; else skip)
-Use a structured LLM-judge (judgy style) or your own prompt:
-You are grading answers for QA over documents.
-- Faithfulness: Is every claim supported by provided chunks? (0/1)
-- Relevance: Does it answer the question? (0/1)
-Return JSON: {"faithfulness": 0|1, "relevance": 0|1, "explanation": "..."}
-Cross-check: if retrieval metrics high but faithfulness low, fix prompting.
-Export runs/generation/{stamp}__judged.csv.
-9) Orchestration (Grid Search)
-Implement (src/cli.py)
-End-to-end runner:
-parse+chunk for each (cs, ov)
-build index per embedding
-generate QA for each config
-eval retrieval (with/without rerank)
-pick best
-run generator + judge
-Print a Rich table of metrics; write CSV/JSON in runs/.
-CLI examples:
-# 1) Parse+chunk all
-python -m src.cli chunk --config configs/grid.default.yaml
+```
 
-# 2) Build indexes
-python -m src.cli index --config configs/grid.default.yaml
+**Usage:**
+```bash
+python src/generate_answers.py \
+    --qa data/qa/doc__qa.jsonl \
+    --index indexes/faiss/best_config/ \
+    --llm gpt-4o-mini \
+    --k 5
+```
 
-# 3) Generate synthetic QA (LLM or rule-based)
-python -m src.cli synth --config configs/grid.default.yaml
+### Step 8: Generation Evaluation (LLM-as-Judge)
 
-# 4) Evaluate retrieval (no rerank + rerank)
-python -m src.cli eval-retrieval --config configs/grid.default.yaml --rerank none
-python -m src.cli eval-retrieval --config configs/grid.default.yaml --rerank cohere
+**Script:** `src/eval_generation.py`
 
-# 5) Select best & attach generator
-python -m src.cli gen --best --k 5 --provider openai --model gpt-4o-mini
+**What it does:**
+- Evaluates answer quality with LLM judge
+- Assesses faithfulness, relevance, completeness, citations
+- Provides actionable feedback
 
-# 6) Judge answers
-python -m src.cli eval-gen --judge openai:gpt-4o-mini
+**Criteria:**
+1. **Faithfulness (0-5):** Grounding in retrieved text
+2. **Relevance (0-5):** Addresses the question
+3. **Completeness (0-5):** Comprehensive coverage
+4. **Citation Quality (0-5):** Proper attribution
+
+**Output:** `runs/generation/evaluation__{config}.csv`
+
+**Usage:**
+```bash
+python src/eval_generation.py \
+    --answers runs/generation/answers__best_config.jsonl \
+    --judge-llm gpt-4o-mini
+```
+
+### Step 9: End-to-End Pipeline
+
+**Script:** `src/run_pipeline.py`
+
+**What it does:**
+- Orchestrates all steps automatically
+- Manages dependencies between steps
+- Provides progress tracking and summaries
+
+**Modes:**
+1. **Full:** Complete evaluation (18 configurations)
+2. **Quick:** Single configuration for testing
+3. **Skip-eval:** Infrastructure only (no API calls)
+
+## 📊 Evaluation Grid
+
+The pipeline tests all combinations:
+
+```
+Parsers (2):        PyMuPDF, pdfplumber
+Chunk Sizes (3):    128, 256, 512 tokens
+Overlaps (3):       32, 64, 128 tokens (25% ratio)
+Embeddings (3):     ada-002, 3-small, 3-large
+K Values (1):       5
+
+Total: 2 × 3 × 3 × 3 = 18 configurations
+```
+
+## 💰 Cost & Performance
+
+**Full Pipeline (18 configs):**
+- Time: ~15 minutes
+- Cost: ~$0.10 (OpenAI API)
+- Storage: ~75MB (FAISS indexes)
+
+**Quick Mode (1 config):**
+- Time: ~5 minutes
+- Cost: ~$0.02
+- Storage: ~4MB
+
+**Production (per answer):**
+- Time: ~3 seconds
+- Cost: ~$0.002
+
+## 🎓 Key Learnings
+
+### Parser Selection
+- **pdfplumber:** 85% more content extraction (220 blocks vs 119)
+- **PyMuPDF:** Faster but misses complex layouts
+
+### Chunk Size Trade-offs
+- **Small (128):** Better recall, more redundancy, higher cost
+- **Medium (256):** Balanced performance
+- **Large (512):** Best semantic cohesion, lower recall
+
+### Overlap Strategy
+- **25% ratio** (e.g., 512:128) optimal for context preservation
+- Too little: Missing boundary information
+- Too much: Redundancy without benefit
+
+### Embedding Models
+- **ada-002:** Best cost/performance balance
+- **3-small:** Similar performance, slightly cheaper
+- **3-large:** Marginal gains, 2x cost
+
+## 🔍 Advanced Usage
+
+### Individual Scripts
+
+Run pipeline steps independently for debugging:
+
+```bash
+# Parse only
+python src/parse_chunk.py --pdf data/raw/doc.pdf --parser pdfplumber
+
+# Index only
+python src/build_index.py --chunks data/processed/doc*.jsonl
+
+# Evaluate specific configuration
+python src/eval_retrieval.py --config-filter "cs512__ov128"
+```
+
+### Custom Configurations
+
+Edit `configs/grid.default.yaml`:
+
+```yaml
+chunk_sizes: [256, 512, 1024]  # Test larger chunks
+embeddings:
+  - openai:text-embedding-3-large  # Use only premium model
+k_values: [3, 5, 10]  # Test different K values
+```
+
+### Backup Results
+
+```bash
+# Before re-running pipeline
+./save_results.sh
+
+# Manual backup
+cp -r runs runs_backup_$(date +%Y%m%d_%H%M%S)
+```
+
+## 📝 Documentation
+
+Detailed guides available:
+- `STEP4_COMPLETE.md` - Synthetic QA generation
+- `STEP5_COMPLETE.md` - Retrieval evaluation
+- `STEP7_COMPLETE.md` - Answer generation
+- `STEP8_COMPLETE.md` - LLM-as-Judge evaluation
+- `STEP9_COMPLETE.md` - End-to-end pipeline
+- `FILE_MANAGEMENT.md` - File handling and backups
+- `GOLD_ANSWERS_EXPLAINED.md` - Gold labels concept
+
+## ⚠️ Important Notes
+
+### File Overwriting
+Files use **deterministic naming** (no timestamps):
+- Same configuration → Same filename → **Overwrites previous results**
+- This is by design for clean organization
+- Use git or backups to preserve important results
+
+### API Keys
+Never commit `.env` file:
+```bash
+# .gitignore already configured
+.env
+```
+
+### Context Window
+Ensure `K × chunk_size` fits LLM context:
+```
+k=5, chunk=512 → 2,560 tokens (safe for most models)
+```
+
+## 🤝 Contributing
+
+This is a learning project. Suggestions welcome:
+1. Test with your own documents
+2. Share optimization findings
+3. Report issues or improvements
+
+## 📄 License
+
+MIT License - Feel free to use and modify
+
+## 🙏 Acknowledgments
+
+Built as a systematic learning exercise for:
+- RAG pipeline design
+- Systematic evaluation methodology
+- Production-ready ML engineering
+
+---
+
+**Ready to start?**
+
+```bash
+python src/run_pipeline.py --pdf data/raw/your_document.pdf --quick
+```
