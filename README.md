@@ -27,6 +27,8 @@ python src/run_pipeline.py --pdf data/raw/your_document.pdf --skip-eval
 
 ## 📊 Current Best Configuration
 
+> **📋 See [RESULTS_SUMMARY.md](RESULTS_SUMMARY.md) for complete evaluation results, comparison tables, and detailed analysis**
+
 **Retrieval Performance:**
 - **Parser:** pdfplumber (+85% more content vs PyMuPDF)
 - **Chunks:** 512 tokens with 128 overlap (25% ratio)
@@ -394,6 +396,7 @@ cp -r runs runs_backup_$(date +%Y%m%d_%H%M%S)
 ## 📝 Documentation
 
 Detailed guides available:
+- **`RESULTS_SUMMARY.md`** - Complete evaluation results and analysis ⭐
 - `STEP4_COMPLETE.md` - Synthetic QA generation
 - `STEP5_COMPLETE.md` - Retrieval evaluation
 - `STEP7_COMPLETE.md` - Answer generation
