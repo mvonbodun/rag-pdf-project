@@ -44,7 +44,8 @@ class RAGPipeline:
         pdf_path: Path,
         output_dir: Path,
         quick_mode: bool = False,
-        skip_eval: bool = False
+        skip_eval: bool = False,
+        start_step: int = 1
     ):
         """
         Initialize the pipeline.
@@ -54,11 +55,13 @@ class RAGPipeline:
             output_dir: Root directory for outputs
             quick_mode: If True, use minimal configurations for faster testing
             skip_eval: If True, skip expensive evaluation steps
+            start_step: Step number to start from (1-9)
         """
         self.pdf_path = pdf_path
         self.output_dir = output_dir
         self.quick_mode = quick_mode
         self.skip_eval = skip_eval
+        self.start_step = start_step
         
         # Pipeline state
         self.stats = {
@@ -172,7 +175,7 @@ class RAGPipeline:
                 for config in self.chunk_configs:
                     cmd = [
                         'python', 'src/parse_chunk.py',
-                        '--pdf', str(self.pdf_path),
+                        str(self.pdf_path),  # Positional argument, not --pdf
                         '--parser', parser,
                         '--chunk-size', str(config['size']),
                         '--overlap', str(config['overlap']),
@@ -197,8 +200,9 @@ class RAGPipeline:
         
         cmd = [
             'python', 'src/build_index.py',
-            '--chunks-dir', 'data/processed',
-            '--output-dir', 'indexes/faiss'
+            '--chunk-dir', 'data/processed',
+            '--output-dir', 'indexes/faiss',
+            '--prefix', self.pdf_path.stem
         ]
         
         if not self.run_command(cmd, "build_indexes"):
@@ -219,9 +223,10 @@ class RAGPipeline:
         
         cmd = [
             'python', 'src/gen_synth_qa.py',
-            '--chunks-dir', 'data/processed',
+            '--chunk-dir', 'data/processed',
             '--output-dir', 'data/qa',
-            '--model', self.llm_model
+            '--model', self.llm_model,
+            '--prefix', self.pdf_path.stem
         ]
         
         if not self.run_command(cmd, "generate_qa"):
@@ -245,7 +250,8 @@ class RAGPipeline:
             '--indexes-dir', 'indexes/faiss',
             '--qa-dir', 'data/qa',
             '--output-dir', 'runs/retrieval',
-            f'--k-values', '1,3,5,10'
+            '--k-values', '1', '3', '5', '10',  # Space-separated, not comma-separated
+            '--prefix', self.pdf_path.stem
         ]
         
         if not self.run_command(cmd, "eval_retrieval"):
@@ -400,7 +406,15 @@ class RAGPipeline:
             ('Step 9: Final Analysis', self.step9_final_analysis),
         ]
         
-        for step_name, step_func in steps:
+        # Start from specified step
+        if self.start_step > 1:
+            console.print(f"[yellow]⏩ Starting from Step {self.start_step}[/yellow]")
+            console.print(f"[dim]Assuming Steps 1-{self.start_step-1} are already completed[/dim]\n")
+        
+        for step_num, (step_name, step_func) in enumerate(steps, start=1):
+            # Skip steps before start_step
+            if step_num < self.start_step:
+                continue
             try:
                 if not step_func():
                     console.print(f"\n[bold red]✗ Pipeline failed at: {step_name}[/bold red]")
@@ -432,6 +446,9 @@ Examples:
 
   # Skip expensive evaluations
   python src/run_pipeline.py --pdf data/raw/fy10syb.pdf --skip-eval
+  
+  # Resume from a specific step (e.g., Step 5)
+  python src/run_pipeline.py --pdf data/raw/fy10syb.pdf --start-step 5
         """
     )
     
@@ -461,6 +478,14 @@ Examples:
         help='Skip expensive evaluation steps (QA generation, LLM-as-Judge)'
     )
     
+    parser.add_argument(
+        '--start-step',
+        type=int,
+        choices=[1, 2, 3, 4, 5, 6, 7, 8, 9],
+        default=1,
+        help='Start from specific step (1-9). Previous steps must be completed.'
+    )
+    
     args = parser.parse_args()
     
     # Run pipeline
@@ -468,7 +493,8 @@ Examples:
         pdf_path=args.pdf,
         output_dir=args.output_dir,
         quick_mode=args.quick,
-        skip_eval=args.skip_eval
+        skip_eval=args.skip_eval,
+        start_step=args.start_step
     )
     
     success = pipeline.run()

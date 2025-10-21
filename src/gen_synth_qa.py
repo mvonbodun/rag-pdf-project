@@ -434,7 +434,8 @@ def generate_qa_grid(
     num_factual: int = 5,
     num_analytical: int = 3,
     num_multi_hop: int = 2,
-    num_boundary: int = 2
+    num_boundary: int = 2,
+    prefix: str = None
 ) -> List[Dict[str, Any]]:
     """
     Generate QA pairs for all chunked files in a directory.
@@ -447,11 +448,16 @@ def generate_qa_grid(
         num_analytical: Number of analytical questions per file
         num_multi_hop: Number of multi-hop questions per file
         num_boundary: Number of boundary questions per file
+        prefix: Only process files starting with this prefix
     
     Returns:
         List of statistics for each file processed
     """
     chunk_files = sorted(chunk_dir.glob("*.jsonl"))
+    
+    # Filter by prefix if provided
+    if prefix:
+        chunk_files = [f for f in chunk_files if f.stem.startswith(prefix)]
     
     if not chunk_files:
         console.print(f"[red]No JSONL files found in {chunk_dir}[/red]")
@@ -562,6 +568,11 @@ if __name__ == "__main__":
                        help="Number of multi-hop questions (default: 2)")
     parser.add_argument("--num-boundary", type=int, default=2,
                        help="Number of boundary questions (default: 2)")
+    parser.add_argument(
+        "--prefix",
+        type=str,
+        help="Only process chunk files starting with this prefix (e.g., 'fy10syb')"
+    )
     
     args = parser.parse_args()
     
@@ -592,7 +603,8 @@ if __name__ == "__main__":
                 num_factual=args.num_factual,
                 num_analytical=args.num_analytical,
                 num_multi_hop=args.num_multi_hop,
-                num_boundary=args.num_boundary
+                num_boundary=args.num_boundary,
+                prefix=args.prefix
             )
             
     except Exception as e:

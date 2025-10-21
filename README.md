@@ -355,6 +355,39 @@ Total: 2 × 3 × 3 × 3 = 18 configurations
 - **3-small:** Similar performance, slightly cheaper
 - **3-large:** Marginal gains, 2x cost
 
+## 🔍 Query Your Indexes
+
+Once you've built indexes, you can query them interactively to explore your documents:
+
+```bash
+# Interactive mode with index selection menu
+python src/query_index.py
+
+# Interactive mode with specific index
+python src/query_index.py -i fy10syb__parser_pdfplumber__cs512__ov128__emb_openai-small
+
+# Single query mode
+python src/query_index.py \
+    -i fy10syb__parser_pdfplumber__cs512__ov128__emb_openai-small \
+    -q "What is the total budget for FY 2010?" \
+    -k 5
+```
+
+**Features:**
+- 🎨 Beautiful, color-coded results
+- � Browse all available indexes with selection menu
+- 🔄 Switch between indexes without restarting
+- 📊 Similarity scores for each result
+- 💬 Natural language queries
+- ❓ Built-in help command
+
+**Interactive Commands:**
+- `switch` - Change to a different index
+- `k=N` - Adjust number of results
+- `help` - Show available commands
+
+**See [QUERY_TOOL.md](QUERY_TOOL.md) for complete documentation and examples.**
+
 ## 🔍 Advanced Usage
 
 ### Individual Scripts

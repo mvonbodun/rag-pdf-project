@@ -338,7 +338,8 @@ def build_index_grid(
     output_base_dir: Path,
     batch_size: int = 32,
     index_type: str = "flat",
-    pattern: str = "*.jsonl"
+    pattern: str = "*.jsonl",
+    prefix: str = None
 ) -> List[Dict]:
     """
     Build indexes for all chunk files and embedding models
@@ -350,6 +351,7 @@ def build_index_grid(
         batch_size: Batch size for embedding
         index_type: Type of FAISS index
         pattern: Glob pattern for chunk files
+        prefix: Only process files starting with this prefix
         
     Returns:
         List of results with index paths and metadata
@@ -359,6 +361,10 @@ def build_index_grid(
     
     # Filter out non-parser files (like sample.jsonl)
     chunk_files = [f for f in chunk_files if "__parser_" in f.name]
+    
+    # Filter by prefix if provided
+    if prefix:
+        chunk_files = [f for f in chunk_files if f.stem.startswith(prefix)]
     
     if not chunk_files:
         print(f"No chunk files found in {chunk_dir} matching {pattern}")
@@ -449,6 +455,11 @@ def main():
         default="flat",
         help="Type of FAISS index"
     )
+    parser.add_argument(
+        "--prefix",
+        type=str,
+        help="Only process chunk files starting with this prefix (e.g., 'fy10syb')"
+    )
     
     args = parser.parse_args()
     
@@ -482,7 +493,8 @@ def main():
             embedding_configs=embedding_configs,
             output_base_dir=args.output_dir,
             batch_size=args.batch_size,
-            index_type=args.index_type
+            index_type=args.index_type,
+            prefix=args.prefix
         )
         
         # Print summary

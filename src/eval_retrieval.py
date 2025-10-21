@@ -312,7 +312,8 @@ def evaluate_all_indexes(
     indexes_dir: Path,
     qa_dir: Path,
     output_dir: Path,
-    k_values: List[int] = [1, 3, 5, 10]
+    k_values: List[int] = [1, 3, 5, 10],
+    prefix: str = None
 ) -> pd.DataFrame:
     """
     Evaluate all vector indexes against their corresponding QA files.
@@ -322,12 +323,17 @@ def evaluate_all_indexes(
         qa_dir: Directory containing QA files
         output_dir: Directory to save evaluation results
         k_values: List of K values for metrics
+        prefix: Only process files starting with this prefix
     
     Returns:
         DataFrame with aggregated results
     """
     # Find all index directories
     index_dirs = sorted([d for d in indexes_dir.iterdir() if d.is_dir() and (d / "index.faiss").exists()])
+    
+    # Filter by prefix if provided
+    if prefix:
+        index_dirs = [d for d in index_dirs if d.name.startswith(prefix)]
     
     if not index_dirs:
         console.print(f"[red]No index directories found in {indexes_dir}[/red]")
@@ -512,6 +518,11 @@ if __name__ == "__main__":
                        help="Output directory for results (default: runs/retrieval)")
     parser.add_argument("--k-values", type=int, nargs='+', default=[1, 3, 5, 10],
                        help="K values for metrics (default: 1 3 5 10)")
+    parser.add_argument(
+        "--prefix",
+        type=str,
+        help="Only process files starting with this prefix (e.g., 'fy10syb')"
+    )
     
     args = parser.parse_args()
     
@@ -520,7 +531,8 @@ if __name__ == "__main__":
             indexes_dir=args.indexes_dir,
             qa_dir=args.qa_dir,
             output_dir=args.output_dir,
-            k_values=args.k_values
+            k_values=args.k_values,
+            prefix=args.prefix
         )
         
         console.print(f"\n[bold green]✓ Evaluation complete![/bold green] Evaluated {len(df)} queries.")

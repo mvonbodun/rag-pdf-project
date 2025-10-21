@@ -16,3 +16,28 @@ python -m src.cli gen --best --k 5 --provider openai --model gpt-4o-mini
 
 # 6) Judge answers
 python -m src.cli eval-gen --judge openai:gpt-4o-mini
+
+# ============================================================
+# QUERY TOOL - Interactive FAISS Index Exploration
+# ============================================================
+
+# Query a specific index (single query)
+python src/query_index.py \
+    -i fy10syb__parser_pdfplumber__cs512__ov128__emb_openai-small \
+    -q "What is the total budget for FY 2010?" \
+    -k 5
+
+# Interactive mode (multiple queries)
+python src/query_index.py -i fy10syb__parser_pdfplumber__cs512__ov128__emb_openai-small
+
+# Query ASICS catalog
+python src/query_index.py \
+    -i ASICS-AW23-Run-Catalog__parser_pdfplumber__cs256__ov64__emb_openai-small \
+    -q "What are the features of the GEL-NIMBUS shoes?" \
+    -k 3
+
+# Use full path
+python src/query_index.py \
+    --index indexes/faiss/fy10syb__parser_pdfplumber__cs512__ov128__emb_ada-002 \
+    --query "How many appeals were processed?" \
+    --top-k 10
